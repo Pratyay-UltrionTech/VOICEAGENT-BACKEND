@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -22,6 +22,13 @@ class Settings(BaseSettings):
 
     mongodb_uri: str = Field(default="", alias="MONGODB_URI")
     mongodb_db_name: str = Field(default="Tara", alias="MONGODB_DB_NAME")
+
+    @field_validator("mongodb_uri", mode="before")
+    @classmethod
+    def _strip_mongodb_uri(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().strip('"').strip("'")
+        return value
 
     app_name: str = "Tara Customer 360 Intelligence Engine"
     app_version: str = "1.0.0"

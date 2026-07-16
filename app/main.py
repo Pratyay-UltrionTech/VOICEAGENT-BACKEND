@@ -325,6 +325,13 @@ async def app_exception_handler(_request: Request, exc: AppException) -> JSONRes
     return JSONResponse(status_code=500, content={"detail": exc.message})
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Ensure JSON 500 responses include CORS headers (plain Starlette 500s do not)."""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
 @app.get("/health", tags=["Health"])
 def health_check() -> dict[str, str]:
     mongo_status = "unknown"

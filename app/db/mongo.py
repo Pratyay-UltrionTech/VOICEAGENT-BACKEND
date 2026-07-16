@@ -6,6 +6,7 @@ import re
 from collections.abc import Generator
 from typing import Any
 
+from fastapi import HTTPException
 from pymongo import ASCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -20,7 +21,7 @@ _client: MongoClient | None = None
 
 def normalize_mongodb_uri(uri: str) -> str:
     """Fix common Azure Cosmos DB connection string issues for pymongo."""
-    cleaned = (uri or "").strip()
+    cleaned = (uri or "").strip().strip('"').strip("'")
     if not cleaned:
         return cleaned
 
@@ -28,6 +29,19 @@ def normalize_mongodb_uri(uri: str) -> str:
     cleaned = re.sub(r"([&?])appName=@([^@&]+)@", r"\1appName=\2", cleaned)
     if cleaned.endswith("@"):
         cleaned = cleaned[:-1]
+
+    # Drop malformed query options (pymongo requires key=value pairs).
+    if "?" in cleaned:
+        base, opts = cleaned.split("?", 1)
+        valid_opts: list[str] = []
+        for part in opts.split("&"):
+            if not part:
+                continue
+            if "=" not in part:
+                logger.warning("Dropping malformed MongoDB URI option segment")
+                continue
+            valid_opts.append(part)
+        cleaned = f"{base}?{'&'.join(valid_opts)}" if valid_opts else base
 
     return cleaned
 
@@ -327,7 +341,13 @@ def ensure_indexes(collections: set[str] | None = None) -> None:
 
 def get_db() -> Generator[MongoDatabase, None, None]:
     """FastAPI dependency yielding a MongoDB database wrapper."""
-    db = MongoDatabase()
+    try:
+        db = MongoDatabase()
+    except Exception as exc:
+        detail = exc.__class__.__name__
+        if "InvalidURI" in detail:
+            detail = "InvalidURI — fix MONGODB_URI in Azure App Settings"
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {detail}") from exc
     try:
         yield db
     finally:

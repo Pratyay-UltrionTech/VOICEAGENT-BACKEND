@@ -78,7 +78,8 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=true \
               ENABLE_ORYX_BUILD=true \
               WEBSITES_PORT=8000 \
-              PYTHONPATH=/home/site/wwwroot
+              PYTHONPATH=/home/site/wwwroot \
+              CORS_ALLOWED_ORIGINS=https://tara.ultriontech.com,https://www.tara.ultriontech.com
           az webapp config set \
             -g "$RG" \
             -n VoiceAgent \
