@@ -36,7 +36,7 @@ from app.routers.behaviour_router import router as behaviour_router, frontend_ro
 from app.routers.customer360_router import router as customer360_router
 from app.routers.financial_router import router as financial_router, frontend_router as financial_frontend_router
 from app.routers.transaction_router import router as transaction_router, frontend_router as transaction_frontend_router
-from app.db.mongo import ensure_indexes
+from app.db.mongo import ensure_indexes, get_mongo_client
 from app.utils.exceptions import (
     AppException,
     BehaviourSummaryNotFoundError,
@@ -63,7 +63,14 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ensure MongoDB indexes on startup; optional learning scheduler."""
-    ensure_indexes()
+    try:
+        ensure_indexes()
+        logger.info("Customer360 Intelligence Engine started — MongoDB ready")
+    except Exception as exc:
+        logger.error(
+            "MongoDB startup failed — API will run but data endpoints may fail: %s",
+            exc,
+        )
     scheduler = None
     if settings.learning_scheduler_enabled:
         try:
@@ -75,7 +82,6 @@ async def lifespan(app: FastAPI):
             logger.info("Learning scheduler started (every %sh)", settings.learning_scheduler_interval_hours)
         except Exception as exc:
             logger.warning("Learning scheduler failed to start: %s", exc)
-    logger.info("Customer360 Intelligence Engine started — MongoDB ready")
     sid = (settings.twilio_account_sid or "").strip()
     if sid:
         logger.info("Twilio account SID: %s…%s", sid[:4], sid[-4:] if len(sid) > 8 else sid)
@@ -121,8 +127,7 @@ app = FastAPI(
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
-# Allow the Vite dev server and any local port, plus production origins.
-_ALLOWED_ORIGINS = [
+_LOCAL_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
@@ -131,12 +136,24 @@ _ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
+]
+
+_DEPLOYED_ORIGINS = [
     "https://polite-smoke-0531ca810.7.azurestaticapps.net",
 ]
+
+_extra = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+_ALLOWED_ORIGINS = _LOCAL_ORIGINS + _DEPLOYED_ORIGINS + _extra
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -309,4 +326,14 @@ async def app_exception_handler(_request: Request, exc: AppException) -> JSONRes
 
 @app.get("/health", tags=["Health"])
 def health_check() -> dict[str, str]:
-    return {"status": "healthy", "service": settings.app_name}
+    mongo_status = "unknown"
+    try:
+        get_mongo_client().admin.command("ping")
+        mongo_status = "connected"
+    except Exception as exc:
+        mongo_status = f"error: {exc.__class__.__name__}"
+    return {
+        "status": "healthy",
+        "service": settings.app_name,
+        "mongodb": mongo_status,
+    }
