@@ -104,9 +104,9 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
     sendgrid_api_key: str = Field(default="", alias="SENDGRID_API_KEY")
 
-    engagement_bank_name: str = Field(default="IDBI Bank", alias="ENGAGEMENT_BANK_NAME")
+    engagement_bank_name: str = Field(default="the bank", alias="ENGAGEMENT_BANK_NAME")
     engagement_email_cta_url: str = Field(
-        default="https://www.idbi.bank.in/",
+        default="https://www.example.com/",
         alias="ENGAGEMENT_EMAIL_CTA_URL",
     )
     engagement_callback_url: str = Field(
