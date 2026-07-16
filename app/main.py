@@ -139,7 +139,7 @@ _LOCAL_ORIGINS = [
 ]
 
 _DEPLOYED_ORIGINS = [
-    "https://polite-smoke-0531ca810.7.azurestaticapps.net",
+    "https://tara.ultriontech.com",
 ]
 
 _extra = [
@@ -153,7 +153,6 @@ _ALLOWED_ORIGINS = _LOCAL_ORIGINS + _DEPLOYED_ORIGINS + _extra
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
