@@ -1,5 +1,4 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
 
 name: Build and deploy Python app to Azure Web App - VoiceAgent
 
@@ -9,7 +8,6 @@ on:
       - main
   workflow_dispatch:
 
-# Prevent overlapping deploys — a common cause of OneDeploy 409 Conflict errors.
 concurrency:
   group: voiceagent-backend-production
   cancel-in-progress: true
@@ -28,19 +26,21 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies into antenv
+      - name: Validate dependencies install
         run: |
-          python -m venv antenv
-          source antenv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           chmod +x startup.sh
 
-      - name: Upload deployment artifact (includes pre-built antenv)
+      - name: Upload source artifact (Oryx builds on Azure)
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: .
+          path: |
+            .
+            !antenv/
+            !.venv/
+            !venv/
           retention-days: 1
 
   deploy:
@@ -51,7 +51,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Download deployment artifact
+      - name: Download source artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
@@ -63,7 +63,7 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EA5AA3532A384B358389520868A076DA }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_35E837480CA74D1EA20EC7521953649C }}
 
-      - name: Configure App Service for pre-built deploy
+      - name: Configure App Service (Python 3.12 + Oryx build)
         run: |
           RG=$(az webapp list --query "[?name=='VoiceAgent'].resourceGroup | [0]" -o tsv)
           if [ -z "$RG" ] || [ "$RG" = "null" ]; then
@@ -74,56 +74,37 @@ jobs:
           az webapp config appsettings set \
             -g "$RG" \
             -n VoiceAgent \
-            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false WEBSITES_PORT=8000
+            --settings \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              ENABLE_ORYX_BUILD=true \
+              WEBSITES_PORT=8000 \
+              PYTHONPATH=/home/site/wwwroot
           az webapp config set \
             -g "$RG" \
             -n VoiceAgent \
-            --linux-fx-version "PYTHON|3.12"
+            --linux-fx-version "PYTHON|3.12" \
+            --startup-file "bash startup.sh"
           echo "Waiting for App Service configuration to settle..."
-          sleep 30
+          sleep 20
 
-      - name: Deploy to Azure Web App (attempt 1)
-        id: deploy1
-        continue-on-error: true
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: VoiceAgent
           slot-name: Production
           startup-command: bash startup.sh
 
-      - name: Wait before retry
-        if: steps.deploy1.outcome == 'failure'
-        run: sleep 90
-
-      - name: Deploy to Azure Web App (attempt 2)
-        id: deploy2
-        if: steps.deploy1.outcome == 'failure'
-        continue-on-error: true
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: VoiceAgent
-          slot-name: Production
-          startup-command: bash startup.sh
-
-      - name: Wait before final retry
-        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
-        run: sleep 90
-
-      - name: Deploy to Azure Web App (attempt 3)
-        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: VoiceAgent
-          slot-name: Production
-          startup-command: bash startup.sh
-
-      - name: Verify deploy succeeded
+      - name: Smoke test /health
         run: |
-          if [ "${{ steps.deploy1.outcome }}" = "success" ] \
-            || [ "${{ steps.deploy2.outcome }}" = "success" ] \
-            || [ "${{ steps.deploy3.outcome }}" = "success" ]; then
-            echo "Deployment succeeded."
-            exit 0
-          fi
-          echo "All deployment attempts failed (409 Conflict or SCM restart is common — re-run workflow)."
+          URL="https://voiceagent-cxhkdsdcfcbkbcg2.centralindia-01.azurewebsites.net/health"
+          for i in 1 2 3 4 5 6; do
+            echo "Health check attempt $i..."
+            if curl -fsS "$URL"; then
+              echo ""
+              echo "Backend is healthy."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Backend /health did not return success after deploy."
           exit 1

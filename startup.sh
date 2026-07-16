@@ -1,12 +1,11 @@
 #!/bin/bash
-set -euo pipefail
-
-cd /home/site/wwwroot
+cd /home/site/wwwroot || exit 1
 export PYTHONPATH="/home/site/wwwroot:${PYTHONPATH:-}"
 PORT="${PORT:-8000}"
 
-if [ -x "./antenv/bin/python" ]; then
-  exec ./antenv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+# Oryx creates this venv during deployment when SCM_DO_BUILD_DURING_DEPLOYMENT=true
+if [ -x "/home/site/wwwroot/antenv/bin/python" ]; then
+  exec /home/site/wwwroot/antenv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
 fi
 
-exec python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

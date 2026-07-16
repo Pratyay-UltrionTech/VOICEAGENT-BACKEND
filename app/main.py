@@ -140,6 +140,7 @@ _LOCAL_ORIGINS = [
 
 _DEPLOYED_ORIGINS = [
     "https://tara.ultriontech.com",
+    "https://www.tara.ultriontech.com",
 ]
 
 _extra = [
@@ -153,6 +154,7 @@ _ALLOWED_ORIGINS = _LOCAL_ORIGINS + _DEPLOYED_ORIGINS + _extra
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://(.*\.)?tara\.ultriontech\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
