@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Generator
 from typing import Any
 
@@ -17,6 +18,20 @@ logger = get_logger(__name__)
 _client: MongoClient | None = None
 
 
+def normalize_mongodb_uri(uri: str) -> str:
+    """Fix common Azure Cosmos DB connection string issues for pymongo."""
+    cleaned = (uri or "").strip()
+    if not cleaned:
+        return cleaned
+
+    # Cosmos strings often end with appName=@account@ which pymongo rejects.
+    cleaned = re.sub(r"([&?])appName=@([^@&]+)@", r"\1appName=\2", cleaned)
+    if cleaned.endswith("@"):
+        cleaned = cleaned[:-1]
+
+    return cleaned
+
+
 def get_mongo_client() -> MongoClient:
     global _client
     if _client is None:
@@ -25,8 +40,9 @@ def get_mongo_client() -> MongoClient:
             raise RuntimeError(
                 "MONGODB_URI is not set. Add your Azure Cosmos DB connection string to .env"
             )
+        mongo_uri = normalize_mongodb_uri(settings.mongodb_uri)
         _client = MongoClient(
-            settings.mongodb_uri,
+            mongo_uri,
             serverSelectionTimeoutMS=30000,
             connectTimeoutMS=30000,
             socketTimeoutMS=120000,

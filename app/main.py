@@ -332,7 +332,10 @@ def health_check() -> dict[str, str]:
         get_mongo_client().admin.command("ping")
         mongo_status = "connected"
     except Exception as exc:
-        mongo_status = f"error: {exc.__class__.__name__}"
+        detail = exc.__class__.__name__
+        if "InvalidURI" in detail:
+            detail = "InvalidURI (check MONGODB_URI in Azure App Settings)"
+        mongo_status = f"error: {detail}"
     return {
         "status": "healthy",
         "service": settings.app_name,
